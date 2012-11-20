@@ -1,0 +1,75 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+require 'bundler'
+require 'capybara'
+require 'capybara/dsl'
+
+Capybara.register_driver :selenium do |app|
+  Capybara::Selenium::Driver.new(app, :browser => :chrome)
+end
+Capybara.default_driver = :selenium
+Capybara.run_server = false
+
+class RbsDigital
+  include Capybara::DSL
+
+  def open
+    visit "https://www.rbsdigital.com"
+  end
+
+  def log_in(customer_number, pin, password)
+    within_frame 'ctl00_secframe' do
+      fill_in 'Customer number', :with => customer_number.to_s
+      click_button 'Log in'
+     
+      labels = page.all(:css, 'ul.form li label')
+      labels.each do |label|
+
+        label.text[/Enter the (\d).. (number|character)/]
+        
+        secret = case $2
+          when 'number'
+            pin
+          when 'character'
+            password
+        end
+        
+        code = secret[$1.to_i-1, 1]
+        input = find(:css, "##{label['for']}")
+        
+        input.set(code)
+      end
+      click_button "Next"
+#      click_button "Next"
+    end
+  end
+
+  def download_statement
+    click_link("Statements")
+    click_button("Download transactions")
+    click_button("Next")
+    click_button("Download transactions")
+  end
+end
+
+def quietly
+  `stty -echo`
+  result = yield
+  `stty echo`
+  result
+end
+
+
+rbs = RbsDigital.new
+
+puts "Enter your 4-digit PIN"
+pin = quietly { gets.strip }
+puts "Enter your password"
+password = quietly { gets.strip }
+puts "Logging you in..."
+
+rbs.open
+rbs.log_in(2408750166, pin, password)
+rbs.download_statement if ARGV[0] =~ /d/
+puts "Press any key to exit"
+gets
